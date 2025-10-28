@@ -1,0 +1,1 @@
+/usr/bin/g++ -g CMakeFiles/format.dir/src/format.cpp.o -o /mnt/c/Users/pavel/Documents/ZS_25-26/ZOS/Semestrální-práce/bin/format 

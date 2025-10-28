@@ -1,0 +1,3 @@
+/mnt/c/Users/pavel/Documents/ZS_25-26/ZOS/Semestrální-práce/build/CMakeFiles/ZOS-SP.dir
+/mnt/c/Users/pavel/Documents/ZS_25-26/ZOS/Semestrální-práce/build/CMakeFiles/edit_cache.dir
+/mnt/c/Users/pavel/Documents/ZS_25-26/ZOS/Semestrální-práce/build/CMakeFiles/rebuild_cache.dir

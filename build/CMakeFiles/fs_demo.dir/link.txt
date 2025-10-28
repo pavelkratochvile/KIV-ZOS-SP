@@ -1,0 +1,1 @@
+/usr/bin/g++ -g CMakeFiles/fs_demo.dir/src/demo_main.cpp.o CMakeFiles/fs_demo.dir/src/filesystem.cpp.o -o /mnt/c/Users/pavel/Documents/ZS_25-26/ZOS/Semestrální-práce/bin/fs_demo 

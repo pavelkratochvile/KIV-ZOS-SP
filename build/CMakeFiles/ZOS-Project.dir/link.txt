@@ -1,0 +1,1 @@
+/usr/bin/g++ -g "CMakeFiles/ZOS-Project.dir/src/main.cpp.o" -o /mnt/c/Users/pavel/Documents/ZS_25-26/ZOS/Semestrální-práce/bin/ZOS-Project 

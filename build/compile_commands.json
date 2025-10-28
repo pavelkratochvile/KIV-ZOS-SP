@@ -1,0 +1,37 @@
+[
+{
+  "directory": "/mnt/c/Users/pavel/Documents/ZS_25-26/ZOS/Semestrální-práce/build",
+  "command": "/usr/bin/g++   -g -Wall -Wextra -Wpedantic -std=gnu++17 -o CMakeFiles/ZOS-SP.dir/src/main.cpp.o -c /mnt/c/Users/pavel/Documents/ZS_25-26/ZOS/Semestrální-práce/src/main.cpp",
+  "file": "/mnt/c/Users/pavel/Documents/ZS_25-26/ZOS/Semestrální-práce/src/main.cpp"
+},
+{
+  "directory": "/mnt/c/Users/pavel/Documents/ZS_25-26/ZOS/Semestrální-práce/build",
+  "command": "/usr/bin/g++   -g -Wall -Wextra -Wpedantic -std=gnu++17 -o CMakeFiles/ZOS-SP.dir/src/FS.cpp.o -c /mnt/c/Users/pavel/Documents/ZS_25-26/ZOS/Semestrální-práce/src/FS.cpp",
+  "file": "/mnt/c/Users/pavel/Documents/ZS_25-26/ZOS/Semestrální-práce/src/FS.cpp"
+},
+{
+  "directory": "/mnt/c/Users/pavel/Documents/ZS_25-26/ZOS/Semestrální-práce/build",
+  "command": "/usr/bin/g++   -g -Wall -Wextra -Wpedantic -std=gnu++17 -o CMakeFiles/ZOS-SP.dir/src/superblock.cpp.o -c /mnt/c/Users/pavel/Documents/ZS_25-26/ZOS/Semestrální-práce/src/superblock.cpp",
+  "file": "/mnt/c/Users/pavel/Documents/ZS_25-26/ZOS/Semestrální-práce/src/superblock.cpp"
+},
+{
+  "directory": "/mnt/c/Users/pavel/Documents/ZS_25-26/ZOS/Semestrální-práce/build",
+  "command": "/usr/bin/g++   -g -Wall -Wextra -Wpedantic -std=gnu++17 -o CMakeFiles/ZOS-SP.dir/src/pseudo_inode.cpp.o -c /mnt/c/Users/pavel/Documents/ZS_25-26/ZOS/Semestrální-práce/src/pseudo_inode.cpp",
+  "file": "/mnt/c/Users/pavel/Documents/ZS_25-26/ZOS/Semestrální-práce/src/pseudo_inode.cpp"
+},
+{
+  "directory": "/mnt/c/Users/pavel/Documents/ZS_25-26/ZOS/Semestrální-práce/build",
+  "command": "/usr/bin/g++   -g -Wall -Wextra -Wpedantic -std=gnu++17 -o CMakeFiles/ZOS-SP.dir/src/ConsoleLib.cpp.o -c /mnt/c/Users/pavel/Documents/ZS_25-26/ZOS/Semestrální-práce/src/ConsoleLib.cpp",
+  "file": "/mnt/c/Users/pavel/Documents/ZS_25-26/ZOS/Semestrální-práce/src/ConsoleLib.cpp"
+},
+{
+  "directory": "/mnt/c/Users/pavel/Documents/ZS_25-26/ZOS/Semestrální-práce/build",
+  "command": "/usr/bin/g++   -g -Wall -Wextra -Wpedantic -std=gnu++17 -o CMakeFiles/ZOS-SP.dir/src/dirInfo.cpp.o -c /mnt/c/Users/pavel/Documents/ZS_25-26/ZOS/Semestrální-práce/src/dirInfo.cpp",
+  "file": "/mnt/c/Users/pavel/Documents/ZS_25-26/ZOS/Semestrální-práce/src/dirInfo.cpp"
+},
+{
+  "directory": "/mnt/c/Users/pavel/Documents/ZS_25-26/ZOS/Semestrální-práce/build",
+  "command": "/usr/bin/g++   -g -Wall -Wextra -Wpedantic -std=gnu++17 -o CMakeFiles/ZOS-SP.dir/src/Path.cpp.o -c /mnt/c/Users/pavel/Documents/ZS_25-26/ZOS/Semestrální-práce/src/Path.cpp",
+  "file": "/mnt/c/Users/pavel/Documents/ZS_25-26/ZOS/Semestrální-práce/src/Path.cpp"
+}
+]
