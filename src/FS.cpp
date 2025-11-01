@@ -5,6 +5,8 @@
 #include <sstream>
 #include <fstream>
 #include <array>
+#include <vector>
+#include <cstdint>
 
 FS::FS(std::string path){
     this->path = path;
@@ -58,85 +60,100 @@ int FS::format(int size){
     // Ulož lokální superblock do členského atributu
     this->sb = s;
     fclose(f);
-    std::cout << "zformatovano" << std::endl;
+
+    // Po formátování otevři soubor a vytvoř root adresář, aby byl FS ihned použitelný
+    int rc = this->attach();
+    if (rc != 0) {
+        return rc;
+    }
+
+    int rcRoot = this->makeRoot();
+    if (rcRoot != 0) {
+        return rcRoot;
+    }
+
     return 0;
 }
 
 int FS::attach(){
     this->file = fopen(path.c_str(), "rb+");
     if (!this->file) {
-        std::cerr << "Soubor se nepodařilo otevřít" << std::endl;
         return 2;
     }
 
     if (fread(&this->sb, sizeof(superblock), 1, this->file) != 1) {
-        std::cerr << "Superblok se nepodařilo načíst" << std::endl;
+        std::cerr << "Superblock could not be read" << std::endl;
         fclose(this->file);
         this->file = nullptr;
         return 2;
     }
-
-    std::cout << "Jmeno makace na FS: " << this->sb.signature << std::endl;
+    this->CurrentDirInfo.currentDirId = 0;
+    this->CurrentDirInfo.name = "root";
     return 0;
 }
 
-int32_t FS::findPositionClusterDIR(int32_t direct){
-    int maxItems = CLUSTER_SIZE / sizeof(directory_item);
+FSStats FS::getStats() {
+    FSStats s;
+    if (!this->file) return s;
 
-    for(int i = 0; i < maxItems; i++){
-        directory_item* item = reinterpret_cast<directory_item*>(direct + i * sizeof(directory_item));
-        if(item->inode == 0){
-            std::cout << "Volná pozice na " << i << "-tém dir Itemu" << std::endl;
-            return direct + i * sizeof(directory_item);
+    s.total_size = this->sb.disk_size;
+    s.cluster_size = this->sb.cluster_size;
+    s.total_clusters = this->sb.cluster_count;
+    s.total_inodes = INODE_COUNT;
+
+    // cluster bitmap
+    int32_t totalClusters = this->sb.cluster_count;
+    int32_t clusterBytes = (totalClusters + 7) / 8;
+    std::vector<unsigned char> clusterMap(clusterBytes, 0);
+    if (fseek(this->file, this->sb.bitmap_start_adress, SEEK_SET) == 0) {
+        fread(clusterMap.data(), 1, clusterBytes, this->file);
+    }
+    int usedClusters = 0;
+    for (int i = 0; i < clusterBytes; ++i) {
+        unsigned char b = clusterMap[i];
+        for (int bit = 0; bit < 8; ++bit) {
+            int idx = i * 8 + bit;
+            if (idx >= totalClusters) break;
+            if (b & (1 << bit)) ++usedClusters;
         }
     }
-    return 0;
-}
+    s.used_clusters = usedClusters;
+    s.free_clusters = totalClusters - usedClusters;
 
-int32_t FS::findDirectsClusterDIR(int32_t cluster){
-    int maxDirectsCluster = (CLUSTER_SIZE / sizeof(int32_t));
-    for(int i = 0; i < maxDirectsCluster; i++){
-        int32_t direct = *reinterpret_cast<int32_t*>(cluster + i * sizeof(int32_t));
-        int32_t address = this->findPositionClusterDIR(direct);
-        if(address){
-            return address;
+    // inode bitmap
+    int32_t totalInodes = INODE_COUNT;
+    int32_t inodeBytes = (totalInodes + 7) / 8;
+    std::vector<unsigned char> inodeMap(inodeBytes, 0);
+    if (fseek(this->file, this->sb.bitmapi_start_adress, SEEK_SET) == 0) {
+        fread(inodeMap.data(), 1, inodeBytes, this->file);
+    }
+    int usedInodes = 0;
+    for (int i = 0; i < inodeBytes; ++i) {
+        unsigned char b = inodeMap[i];
+        for (int bit = 0; bit < 8; ++bit) {
+            int idx = i * 8 + bit;
+            if (idx >= totalInodes) break;
+            if (b & (1 << bit)) ++usedInodes;
         }
     }
-    return 0;
-}
+    s.used_inodes = usedInodes;
+    s.free_inodes = totalInodes - usedInodes;
 
-int32_t FS::findPositionInodeDIR(int32_t inodeAddr){
-    pseudo_inode* inode = reinterpret_cast<pseudo_inode*>(inodeAddr);
-    int32_t address = 0;
-    int32_t directTable[DIRECT_COUNT] = {
-        inode->direct1,
-        inode->direct2,
-        inode->direct3,
-        inode->direct4,
-        inode->direct5
-    };
-
-    int32_t indirectTable[INDIRECT_COUNT] = {
-        inode->indirect1,
-        inode->indirect2
-    };
-    
-    for(int i = 0; i < DIRECT_COUNT; i++){
-        address = this->findPositionClusterDIR(directTable[i]);
-        if(address){
-            return address;
+    // count directories by scanning allocated inodes
+    int dirCount = 0;
+    for (int i = 0; i < totalInodes; ++i) {
+        int byteIndex = i / 8;
+        int bitOffset = i % 8;
+        if (byteIndex < inodeBytes && (inodeMap[byteIndex] & (1 << bitOffset))) {
+            pseudo_inode inode;
+            if (fseek(this->file, this->sb.inode_start_adress + i * sizeof(pseudo_inode), SEEK_SET) != 0) continue;
+            if (fread(&inode, sizeof(pseudo_inode), 1, this->file) != 1) continue;
+            if (inode.isDirectory) ++dirCount;
         }
     }
-    
-    for(int i = 0; i <  INDIRECT_COUNT; i++){
-        address = this->findDirectsClusterDIR(indirectTable[i]);
-        if(address){
-            return address;
-        }
-    }
+    s.directory_count = dirCount;
 
-    std::cout << "V adresáři už není místo na nové soubory" << std::endl;
-    return 0;
+    return s;
 }
 
 int FS::makeRoot(){
@@ -158,12 +175,11 @@ int FS::makeRoot(){
     fseek(this->file, this->sb.inode_start_adress, SEEK_SET);
     size_t written = fwrite(&root, sizeof(pseudo_inode), 1, this->file);
     if (written != 1) {
-        std::cerr << "Chyba při zápisu root inode do souboru!" << std::endl;
+        std::cerr << "Error writing root inode to file!" << std::endl;
         return 2;
     }
 
     fflush(this->file); // zajistí zapsání do souboru
-    std::cout << "Root inode úspěšně vytvořen na offsetu " << this->sb.inode_start_adress << std::endl;
     
     int clusterId = (cluster - this->sb.data_start_adress) / this->sb.cluster_size;
     this->setInodeBit(0,1);
@@ -171,8 +187,6 @@ int FS::makeRoot(){
     this->writeDIRItem(cluster, ".", 0);
 
     this->CurrentDirInfo.currentcluster = cluster;
-    this->CurrentDirInfo.currentDirId = 0;
-    this->CurrentDirInfo.name = "root";
 
     return 0;
 }
@@ -184,7 +198,6 @@ int FS::makeDir(Path path){
         return 1;
     }
     else if(inodeExists(parrentID, path.path.back())){
-        std::cout << "adresar jiz existuje" << std::endl;
         return 2;
     }
 
@@ -225,7 +238,6 @@ int FS::makeDir(Path path){
 
 void FS::writeDIRItem(int32_t clusterAddr, std::string dirName, int32_t inodeID){
     if (!this->file) {
-        std::cerr << "[FS::writeDIRItem] Soubor FS není otevřen!" << std::endl;
         return;
     }
 
@@ -238,9 +250,6 @@ void FS::writeDIRItem(int32_t clusterAddr, std::string dirName, int32_t inodeID)
     for (int i = 0; i < maxItems; ++i) {
         fseek(this->file, clusterAddr + i * sizeof(directory_item), SEEK_SET);
         fread(&dir, sizeof(directory_item), 1, this->file);
-        std::cout << "[FS::writeDIRItem] Kontroluji pozici " << i 
-                  << ": inode=" << dir.inode 
-                  << ", name='" << dir.item_name << "'" << std::endl;
 
         if (dir.inode == 0 && dir.item_name[0] == '\0') {  // volné místo
             // připrav nový záznam
@@ -253,25 +262,18 @@ void FS::writeDIRItem(int32_t clusterAddr, std::string dirName, int32_t inodeID)
             fwrite(&dir, sizeof(directory_item), 1, this->file);
             fflush(this->file);
 
-            std::cout << "[FS::writeDIRItem] Zapsán DIR item '" << dirName 
-                      << "' na inode " << inodeID 
-                      << " do clusteru na indexu " << i << std::endl;
-            std::cout << "------------------------" << std::endl;
             return;
         }
     }
-
-    std::cerr << "[FS::writeDIRItem] Cluster je plný, nelze přidat '" << dirName << "'!" << std::endl;
 }
 
 void FS::setInodeBit(int inodeID, int bit){
     if (bit != 0 && bit != 1) {
-        std::cerr << "[FS::setInodeBit] Bit musí být 0 nebo 1!" << std::endl;
         return;
     }
 
     if (inodeID < 0) {
-        std::cerr << "[FS::setInodeBit] Neplatné inode ID!" << std::endl;
+        std::cerr << "[FS::setInodeBit] Invalid inode ID!" << std::endl;
         return;
     }
     int64_t bitmapStart = this->sb.bitmapi_start_adress;
@@ -298,18 +300,16 @@ void FS::setInodeBit(int inodeID, int bit){
     fseek(this->file, bitmapStart + byteIndex, SEEK_SET);
     fwrite(&byte, sizeof(byte), 1, this->file);
     fflush(this->file);
-
-    std::cout << "[FS::setInodeBit] Inode " << inodeID << " nastaven na " << bit << std::endl;
 }
 
 void FS::setClusterBit(int clusterID, int bit){
     if (bit != 0 && bit != 1) {
-        std::cerr << "[FS::setInodeBit] Bit musí být 0 nebo 1!" << std::endl;
+        std::cerr << "[FS::setInodeBit] Bit must be 0 or 1!" << std::endl;
         return;
     }
 
     if (clusterID < 0) {
-        std::cerr << "[FS::setClusterBit] Neplatné cluster ID!" << std::endl;
+        std::cerr << "[FS::setClusterBit] Invalid cluster ID!" << std::endl;
         return;
     }
     int64_t bitmapStart = this->sb.bitmap_start_adress;
@@ -336,8 +336,6 @@ void FS::setClusterBit(int clusterID, int bit){
     fseek(this->file, bitmapStart + byteIndex, SEEK_SET);
     fwrite(&byte, sizeof(byte), 1, this->file);
     fflush(this->file);
-
-    std::cout << "[FS::setClusterBit] Cluster " << clusterID << " nastaven na " << bit << std::endl;
 }
 
 int32_t FS::findFreeCluster(){
@@ -537,13 +535,18 @@ int FS::rmDir(Path path){
 
     int parentInodeID = getInodeFromPath(path, false);
     int32_t parentCluster = getClusterbyID(parentInodeID);
+    rmDirItemByname(parentCluster, path.path.back());
+    return 0;
+}
+
+void FS::rmDirItemByname(int32_t parentCluster, std::string name){
     directory_item dirItem;
     int maxItems = static_cast<int>(this->sb.cluster_size / sizeof(directory_item));
     
     for(int i = 0; i < maxItems; i++){
         fseek(this->file, parentCluster + i * sizeof(directory_item), SEEK_SET);
         fread(&dirItem, sizeof(directory_item), 1, this->file);
-        if(dirItem.item_name == path.path.back()){
+        if(dirItem.item_name == name){
             dirItem.inode = 0;
             dirItem.item_name[0] = '\0';
             fseek(this->file, parentCluster + i * sizeof(directory_item), SEEK_SET);
@@ -552,8 +555,27 @@ int FS::rmDir(Path path){
             break;
         }
     }
-    return 0;
 }
+
+void FS::rmDirItemByID(int32_t parentCluster, int id){
+    directory_item dirItem;
+    int maxItems = static_cast<int>(this->sb.cluster_size / sizeof(directory_item));
+    
+    for(int i = 0; i < maxItems; i++){
+        fseek(this->file, parentCluster + i * sizeof(directory_item), SEEK_SET);
+        fread(&dirItem, sizeof(directory_item), 1, this->file);
+        if(dirItem.inode == id){
+            dirItem.inode = 0;
+            dirItem.item_name[0] = '\0';
+            fseek(this->file, parentCluster + i * sizeof(directory_item), SEEK_SET);
+            fwrite(&dirItem, sizeof(directory_item), 1, this->file);
+            fflush(this->file);
+            break;
+        }
+    }
+}
+
+
 void FS::nullCluster(int32_t cluster){
     for(int i = 0; i < CLUSTER_SIZE; i++){
         char zero = 0;
@@ -640,9 +662,12 @@ int FS::inCopy(Path path, std::string sourcePath) {
     if (inodeID == -1) {
         std::cerr << "Cesta neexistuje v souborovém systému." << std::endl;
         return 1;
-    } else if (!isFile(inodeID)) {
-        std::cerr << "Cesta nevede k souboru." << std::endl;
-        return 3;
+    }
+
+    if(!isFile(inodeID)){
+        path.path.push_back(sourcePath.substr(sourcePath.find_last_of("/\\") + 1));
+        makeFile(path);
+        inodeID = getInodeFromPath(path, true);
     }
 
     // 🔧 Otevři soubor v binárním režimu a načti celý obsah
@@ -767,8 +792,6 @@ int FS::writeContentToFile(int inodeID, std::string content) {
     fseek(this->file, this->sb.inode_start_adress + inodeID * sizeof(pseudo_inode), SEEK_SET);
     fwrite(&inode, sizeof(pseudo_inode), 1, this->file);
     fflush(this->file);
-
-    std::cout << "Zapsáno bloků: " << written << std::endl;
     return 0;
 }
 
@@ -906,5 +929,150 @@ int FS::makeFile(Path path){
     fseek(this->file, inodePos, SEEK_SET);
     fwrite(&file, sizeof(pseudo_inode), 1, this->file);
     fflush(this->file);
+    return 0;
+}
+
+int FS::copy(Path source, Path dest, bool removeOriginal){
+    int sourceID = getInodeFromPath(source, true);
+    int destID = getInodeFromPath(dest, true);
+
+    if(sourceID == -1){
+        return 2;
+    }
+    else if(!isFile(sourceID)){
+        return 4;
+    }
+
+    // soubor neexistuje a je treba ho vytvorit
+    if(destID == -1){
+        int parentDestID = getInodeFromPath(dest, false);
+        if(parentDestID == -1){
+            std::cout << "fakt neexistuje" << std::endl;
+            return 3;
+        }
+        makeFile(dest);
+        destID = getInodeFromPath(dest, true);
+    }
+    // soubor existuje a je to adresar
+    else if(destID != -1 && !isFile(destID)){
+        std::string fileName = source.path.back();
+        dest.path.push_back(fileName);
+        makeFile(dest);
+        destID = getInodeFromPath(dest, true);
+    }
+    // jinak soubor existuje a je to soubor, prepiseme ho
+
+    std::string content = readContentFromFile(sourceID);
+    writeContentToFile(destID, content);
+    if(removeOriginal){
+        remove(source);
+    }
+    return 0;
+}
+
+int FS::remove(Path source){
+    int inodeID = getInodeFromPath(source, true);
+    // validate inode and ensure it's a regular file
+    if(inodeID == -1){
+        return 1; // wrong path
+    }
+    bool isFileFlag = isFile(inodeID);
+    if(!isFileFlag){
+        return 3; // path is a directory (match ConsoleLib expectation)
+    }
+
+
+    int parentInodeID = getInodeFromPath(source, false);
+    int32_t parentCluster = getClusterbyID(parentInodeID);
+    rmDirItemByID(parentCluster, inodeID);
+    
+    pseudo_inode inode;
+    fseek(this->file, this->sb.inode_start_adress + inodeID * sizeof(pseudo_inode), SEEK_SET);
+    fread(&inode, sizeof(pseudo_inode), 1, this->file);
+    
+    std::vector<int32_t> directs = {
+        inode.direct1, inode.direct2, inode.direct3,
+        inode.direct4, inode.direct5
+    };
+    std::vector<int32_t> indirects = {
+        inode.indirect1, inode.indirect2
+    };
+
+    for(size_t i = 0; i < directs.size(); i++){
+        if(directs[i] != 0){
+            int clusterID = (directs[i] - this->sb.data_start_adress) / this->sb.cluster_size;
+            this->setClusterBit(clusterID, 0);
+        }
+    }
+    for(size_t i = 0; i < indirects.size(); i++){
+        if(indirects[i] != 0){
+            size_t entries = this->sb.cluster_size / sizeof(int32_t);
+            std::vector<int32_t> indirectBlock(entries, 0);
+
+            fseek(this->file, indirects[i], SEEK_SET);
+            fread(indirectBlock.data(), sizeof(int32_t), entries, this->file);
+
+            for(size_t j = 0; j < entries; j++){
+                if(indirectBlock[j] != 0){
+                    int clusterID = (indirectBlock[j] - this->sb.data_start_adress) / this->sb.cluster_size;
+                    this->setClusterBit(clusterID, 0);
+                }
+            }
+            int clusterID = (indirects[i] - this->sb.data_start_adress) / this->sb.cluster_size;
+            this->setClusterBit(clusterID, 0);
+        }
+    }
+    this->setInodeBit(inodeID, 0);
+    return 0;
+}
+
+int FS::info(Path path){
+    int inodeID = getInodeFromPath(path, true);
+    int parentID = getInodeFromPath(path, false);
+    if(inodeID == -1 || parentID == -1){
+        return 1;
+    }
+    std::string name = findNameByInode(getClusterbyID(parentID), inodeID);
+    pseudo_inode inode;
+    fseek(this->file, this->sb.inode_start_adress + inodeID * sizeof(pseudo_inode), SEEK_SET);
+    fread(&inode, sizeof(pseudo_inode), 1, this->file);
+    std::cout << "Name: " << name << std::endl;
+    std::cout << "Inode ID: " << inodeID << std::endl;
+    std::cout << "Type: " << (inode.isDirectory ? "Directory" : "File") <<  std::endl;
+    std::cout << "Size: " << inode.file_size << " bytes" << std::endl;
+    return 0;
+}
+
+int FS::xcopy(Path source1, Path source2, Path dest){
+    int source1ID = getInodeFromPath(source1, true);
+    int source2ID = getInodeFromPath(source2, true);
+    int destDirID = getInodeFromPath(dest, false);
+
+    if(source1ID == -1 || source2ID == -1 || destDirID == -1){
+        return 1;
+    }
+
+    makeFile(dest);
+    std::string source1Content = readContentFromFile(source1ID);
+    std::string source2Content = readContentFromFile(source2ID);
+    std::string destContent = source1Content + source2Content;
+
+    int destID = getInodeFromPath(dest, true);
+    writeContentToFile(destID, destContent);
+    return 0;
+}
+
+int FS::add(Path source, Path dest){
+    int sourceID = getInodeFromPath(source, true);
+    int destID = getInodeFromPath(dest, true);
+
+    if(sourceID == -1 || destID == -1){
+        return 1;
+    }
+
+    std::string sourceContent = readContentFromFile(sourceID);
+    std::string destContent = readContentFromFile(destID);
+    std::string finalContent = destContent + sourceContent;
+    writeContentToFile(destID, finalContent);
     return 0;
 }

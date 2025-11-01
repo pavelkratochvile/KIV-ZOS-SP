@@ -1,1 +1,4 @@
-ahoj jak pak se dneska mas
+mkdir ahoj
+mkdir ahoj
+mkdir cau
+touch ahoj/file1.txt
