@@ -5,21 +5,27 @@
 
 int init_superblock(superblock* sb, int size){
     if(!sb){
+        // Neplatný ukazatel na superblok
         return 1;
     }
     if(size <= 0){
-        return 2;  // neplatná velikost
+        // Neplatná velikost
+        return 2;
     }
     
+    // Inicializace superbloku
     memset(sb, 0, sizeof(superblock));
     
+    // Nastavení základních atributů superbloku
     strncpy(sb->signature, "pavelkr", sizeof(sb->signature) - 1);
     sb->signature[sizeof(sb->signature) - 1] = '\0';
     strncpy(sb->volume_descriptor, "Toto je muj FS", sizeof(sb->volume_descriptor) - 1);
     sb->volume_descriptor[sizeof(sb->volume_descriptor) - 1] = '\0';
     
+    // Výpočet velikosti a počtu clusterů
     sb->cluster_size = CLUSTER_SIZE;
 
+    // Výpočet velikosti v bajtech
     int32_t size_bytes = size * 1024 * 1024; 
     int32_t metadata_size = sizeof(superblock) + (INODE_COUNT + 7) / 8 + sizeof(pseudo_inode) * INODE_COUNT;
     int32_t available_for_data = size_bytes - metadata_size;
